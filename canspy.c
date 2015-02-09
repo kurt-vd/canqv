@@ -13,6 +13,7 @@
 /* terminal codes */
 
 #define CLR_SCREEN  "\33[2J"
+#define CSR_HOME  "\33[H"
 #define ATTRESET "\33[0m"
 
 #define NAME "canspy"
@@ -186,12 +187,12 @@ int main(int argc, char *argv[])
 			sort_cache(cache, ncache);
 		}
 		/* update screen */
-		printf("%s%s", CLR_SCREEN, ATTRESET);
+		puts(CLR_SCREEN ATTRESET CSR_HOME);
 		for (j = 0; j < ncache; ++j) {
 			if (cache[j].cf.can_id & CAN_EFF_FLAG)
-				printf("%08x:", cache[j].cf.can_id);
+				printf("%08x:", cache[j].cf.can_id & CAN_EFF_MASK);
 			else
-				printf("     %03x:", cache[j].cf.can_id);
+				printf("     %03x:", cache[j].cf.can_id & CAN_SFF_MASK);
 			for (byte = 0; byte < cache[j].cf.can_dlc; ++byte)
 				printf(" %02x", cache[j].cf.data[byte]);
 			printf("\n");

@@ -1,0 +1,8 @@
+# tmp files
+*.o
+
+# output
+canspy
+
+# environment
+tags

@@ -191,6 +191,8 @@ int main(int argc, char *argv[])
 					memcmp(cache[ret].cf.data, cf.data, cf.can_dlc)) {
 				cache[ret].flags |= F_DIRTY;
 				cache[ret].cf = cf;
+			} else {
+				continue;
 			}
 		}
 		/* update screen */
@@ -203,6 +205,7 @@ int main(int argc, char *argv[])
 			for (byte = 0; byte < cache[j].cf.can_dlc; ++byte)
 				printf(" %02x", cache[j].cf.data[byte]);
 			printf("\n");
+			cache[j].flags &= F_DIRTY;
 		}
 	}
 	return 0;

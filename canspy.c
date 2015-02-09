@@ -185,6 +185,13 @@ int main(int argc, char *argv[])
 			cache[ncache].flags |= F_DIRTY;
 			++ncache;
 			sort_cache(cache, ncache);
+		} else {
+			if ((cache[ret].cf.can_id != cf.can_id) ||
+					(cache[ret].cf.can_dlc != cf.can_dlc) ||
+					memcmp(cache[ret].cf.data, cf.data, cf.can_dlc)) {
+				cache[ret].flags |= F_DIRTY;
+				cache[ret].cf = cf;
+			}
 		}
 		/* update screen */
 		puts(CLR_SCREEN ATTRESET CSR_HOME);

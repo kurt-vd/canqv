@@ -52,7 +52,7 @@ static int cmpcache(const void *va, const void *vb)
 {
 	const struct cache *a = va, *b = vb;
 
-	return b->cf.can_id - a->cf.can_id;
+	return a->cf.can_id - b->cf.can_id;
 }
 
 static inline void sort_cache(struct cache *cache, size_t n)
@@ -60,9 +60,9 @@ static inline void sort_cache(struct cache *cache, size_t n)
 	qsort(cache, n, sizeof(*cache), cmpcache);
 }
 
-static int cf_classify(const struct can_frame *cf, const struct cache *cache, size_t n)
+static int cf_classify(const struct can_frame *cf, const struct cache *cache, int n)
 {
-	size_t idx, top = n, bot = 0;
+	int idx, top = n, bot = 0;
 
 	bot = 0;
 	top = n-1;

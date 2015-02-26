@@ -2,7 +2,7 @@
 *.o
 
 # output
-canspy
+canqv
 
 # environment
 tags

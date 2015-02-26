@@ -18,7 +18,7 @@
 #define CSR_HOME  "\33[H"
 #define ATTRESET "\33[0m"
 
-#define NAME "canspy"
+#define NAME "canqv"
 
 /* program options */
 static const char help_msg[] =

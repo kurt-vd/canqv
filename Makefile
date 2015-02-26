@@ -1,4 +1,4 @@
-PROGRAMS = canspy
+PROGRAMS = canqv
 
 default: $(PROGRAMS)
 

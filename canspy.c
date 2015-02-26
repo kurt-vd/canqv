@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include <error.h>
 #include <getopt.h>
@@ -41,6 +42,17 @@ static struct option long_opts[] = {
 #endif
 static const char optstring[] = "V?v";
 static int verbose;
+
+/* jiffies, in msec */
+static double jiffies;
+
+static void update_jiffies(void)
+{
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+	jiffies = tv.tv_sec + tv.tv_usec/1e6;
+}
 
 /* cache definition */
 struct cache {
@@ -82,7 +94,7 @@ static int cf_classify(const struct can_frame *cf, const struct cache *cache, in
 
 int main(int argc, char *argv[])
 {
-	int opt, ret, sock, j, byte;
+	int opt, ret, sock, j, byte, ndirty;
 	const char *device;
 	char *endp;
 	struct can_filter *filters;
@@ -91,6 +103,7 @@ int main(int argc, char *argv[])
 	struct can_frame cf;
 	struct cache *cache;
 	size_t ncache, scache;
+	double last_update;
 
 	/* argument parsing */
 	while ((opt = getopt_long(argc, argv, optstring, long_opts, NULL)) != -1)
@@ -163,6 +176,7 @@ int main(int argc, char *argv[])
 	scache = ncache = 0;
 	cache = NULL;
 
+	last_update = 0;
 	while (1) {
 		ret = recv(sock, &cf, sizeof(cf), 0);
 		if (ret < 0)
@@ -170,6 +184,7 @@ int main(int argc, char *argv[])
 		if (!ret)
 			break;
 
+		ndirty = 0;
 		ret = cf_classify(&cf, cache, ncache);
 		if (ret >= scache) {
 			scache += 16;
@@ -185,16 +200,23 @@ int main(int argc, char *argv[])
 			cache[ncache].flags |= F_DIRTY;
 			++ncache;
 			sort_cache(cache, ncache);
+			++ndirty;
 		} else {
 			if ((cache[ret].cf.can_id != cf.can_id) ||
 					(cache[ret].cf.can_dlc != cf.can_dlc) ||
 					memcmp(cache[ret].cf.data, cf.data, cf.can_dlc)) {
 				cache[ret].flags |= F_DIRTY;
+				++ndirty;
 				cache[ret].cf = cf;
 			} else {
 				continue;
 			}
 		}
+		update_jiffies();
+		if ((jiffies - last_update) < 0.25)
+			continue;
+		ndirty = 0;
+		last_update = jiffies;
 		/* update screen */
 		puts(CLR_SCREEN ATTRESET CSR_HOME);
 		for (j = 0; j < ncache; ++j) {

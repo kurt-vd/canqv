@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <math.h>
 #include <sys/time.h>
 
 #include <error.h>
@@ -59,6 +60,8 @@ struct cache {
 	struct can_frame cf;
 	int flags;
 		#define F_DIRTY		0x01
+	double lastrx;
+	double period;
 };
 
 static int cmpcache(const void *va, const void *vb)
@@ -68,40 +71,15 @@ static int cmpcache(const void *va, const void *vb)
 	return a->cf.can_id - b->cf.can_id;
 }
 
-static inline void sort_cache(struct cache *cache, size_t n)
-{
-	qsort(cache, n, sizeof(*cache), cmpcache);
-}
-
-static int cf_classify(const struct can_frame *cf, const struct cache *cache, int n)
-{
-	int idx, top = n, bot = 0;
-
-	bot = 0;
-	top = n-1;
-	while (bot <= top) {
-		idx = (top+bot)/2;
-		if (cf->can_id == cache[idx].cf.can_id)
-			return idx;
-		else if (cf->can_id < cache[idx].cf.can_id)
-			top = idx -1;
-		else
-			bot = idx +1;
-	}
-	/* not found */
-	return n;
-}
-
 int main(int argc, char *argv[])
 {
-	int opt, ret, sock, j, byte, ndirty;
+	int opt, ret, sock, j, byte;
 	const char *device;
 	char *endp;
 	struct can_filter *filters;
 	size_t nfilters, sfilters;
 	struct sockaddr_can addr = { .can_family = AF_CAN, };
-	struct can_frame cf;
-	struct cache *cache;
+	struct cache *cache, w, *curr;
 	size_t ncache, scache;
 	double last_update;
 
@@ -178,44 +156,43 @@ int main(int argc, char *argv[])
 
 	last_update = 0;
 	while (1) {
-		ret = recv(sock, &cf, sizeof(cf), 0);
+		ret = recv(sock, &w.cf, sizeof(w.cf), 0);
 		if (ret < 0)
 			error(1, errno, "recv %s", device);
 		if (!ret)
 			break;
 
-		ndirty = 0;
-		ret = cf_classify(&cf, cache, ncache);
-		if (ret >= scache) {
+		update_jiffies();
+		curr = bsearch(&w, cache, ncache, sizeof(*cache), cmpcache);
+		if (!curr && (ncache >= scache)) {
+			/* grow cache */
 			scache += 16;
 			cache = realloc(cache, sizeof(*cache)*scache);
-			for (j = ncache; j < scache; ++j)
-				/* set all bits, including CAN_ERR_FLAG */
-				cache[j].flags = 0;
-
+			memset(cache+ncache, 0, (scache - ncache)*sizeof(*cache));
 		}
-		if (ret >= ncache) {
-			/* store in cache */
-			cache[ncache].cf = cf;
-			cache[ncache].flags |= F_DIRTY;
-			++ncache;
-			sort_cache(cache, ncache);
-			++ndirty;
+		if (!curr) {
+			/* add in cache */
+			curr = cache+ncache++;
+			curr->flags |= F_DIRTY;
+			curr->cf = w.cf;
+			curr->period = NAN;
+			curr->lastrx = jiffies;
+			qsort(cache, ncache, sizeof(*cache), cmpcache);
 		} else {
-			if ((cache[ret].cf.can_id != cf.can_id) ||
-					(cache[ret].cf.can_dlc != cf.can_dlc) ||
-					memcmp(cache[ret].cf.data, cf.data, cf.can_dlc)) {
-				cache[ret].flags |= F_DIRTY;
-				++ndirty;
-				cache[ret].cf = cf;
-			} else {
-				continue;
-			}
+			if ((curr->cf.can_id != w.cf.can_id) ||
+				(curr->cf.can_dlc != w.cf.can_dlc) ||
+				memcmp(curr->cf.data, w.cf.data, w.cf.can_dlc))
+				curr->flags |= F_DIRTY;
+			/* update cache */
+			curr->cf = w.cf;
+			curr->period = jiffies - curr->lastrx;
+			if (curr->period > maxperiod)
+				curr->period = NAN;
+			curr->lastrx = jiffies;
 		}
-		update_jiffies();
+
 		if ((jiffies - last_update) < 0.25)
 			continue;
-		ndirty = 0;
 		last_update = jiffies;
 		/* update screen */
 		puts(CLR_SCREEN ATTRESET CSR_HOME);
@@ -226,6 +203,11 @@ int main(int argc, char *argv[])
 				printf("     %03x:", cache[j].cf.can_id & CAN_SFF_MASK);
 			for (byte = 0; byte < cache[j].cf.can_dlc; ++byte)
 				printf(" %02x", cache[j].cf.data[byte]);
+			for (; byte < 8; ++byte)
+				printf(" --");
+			printf("\tlast=-%.3lfs", jiffies - cache[j].lastrx);
+			if ((jiffies - cache[j].lastrx) < 2*cache[j].period)
+				printf("\tperiod=%.3lfs", cache[j].period);
 			printf("\n");
 			cache[j].flags &= F_DIRTY;
 		}

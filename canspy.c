@@ -29,20 +29,29 @@ static const char help_msg[] =
 	" -V, --version		Show version\n"
 	" -v, --verbose		Verbose output\n"
 	"\n"
+	" -m, --maxperiod=TIME	Consider TIME as maximum period (default 2s).\n"
+	"			Slower rates are considered multiple one-time ID's\n"
+	" -x, --remove=TIME	Remove ID's after TIME (default 10s).\n"
+	"\n"
 	;
 #ifdef _GNU_SOURCE
 static struct option long_opts[] = {
 	{ "help", no_argument, NULL, '?', },
 	{ "version", no_argument, NULL, 'V', },
 	{ "verbose", no_argument, NULL, 'v', },
+
+	{ "remove", required_argument, NULL, 'x', },
+	{ "maxperiod", required_argument, NULL, 'm', },
 	{ },
 };
 #else
 #define getopt_long(argc, argv, optstring, longopts, longindex) \
 	getopt((argc), (argv), (optstring))
 #endif
-static const char optstring[] = "V?v";
+static const char optstring[] = "V?vx:m:";
 static int verbose;
+static double deadtime = 10.0;
+static double maxperiod = 2.0;
 
 /* jiffies, in msec */
 static double jiffies;
@@ -81,7 +90,7 @@ int main(int argc, char *argv[])
 	struct sockaddr_can addr = { .can_family = AF_CAN, };
 	struct cache *cache, w, *curr;
 	size_t ncache, scache;
-	double last_update;
+	double last_update, lastseen;
 
 	/* argument parsing */
 	while ((opt = getopt_long(argc, argv, optstring, long_opts, NULL)) != -1)
@@ -99,6 +108,12 @@ int main(int argc, char *argv[])
 		return opt != '?';
 	case 'v':
 		++verbose;
+		break;
+	case 'x':
+		deadtime = strtod(optarg, NULL);
+		break;
+	case 'm':
+		maxperiod = strtod(optarg, NULL);
 		break;
 	}
 
@@ -193,6 +208,24 @@ int main(int argc, char *argv[])
 
 		if ((jiffies - last_update) < 0.25)
 			continue;
+		/* remove dead cache */
+		for (j = 0; j < ncache; ++j) {
+			curr = cache+j;
+			lastseen = jiffies - curr->lastrx;
+
+			if (lastseen > deadtime) {
+				/* delete this entry */
+				memcpy(cache+j, cache+j+1, (ncache-j-1)*sizeof(*cache));
+				--ncache;
+				--j;
+				continue;
+			}
+
+			if (!isnan(curr->period) && (lastseen > 2*curr->period))
+				/* reset period */
+				curr->period = NAN;
+		}
+
 		last_update = jiffies;
 		/* update screen */
 		puts(CLR_SCREEN ATTRESET CSR_HOME);
@@ -206,7 +239,7 @@ int main(int argc, char *argv[])
 			for (; byte < 8; ++byte)
 				printf(" --");
 			printf("\tlast=-%.3lfs", jiffies - cache[j].lastrx);
-			if ((jiffies - cache[j].lastrx) < 2*cache[j].period)
+			if (!isnan(cache[j].period))
 				printf("\tperiod=%.3lfs", cache[j].period);
 			printf("\n");
 			cache[j].flags &= F_DIRTY;

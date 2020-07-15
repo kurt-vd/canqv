@@ -1,5 +1,6 @@
 /*
  * Copyright 2015 Kurt Van Dijck <dev.kurt@vandijck-laurijssen.be>
+ *           2020 Christoph Gommel <cgommel@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -47,7 +48,7 @@ static const char help_msg[] =
 	"\n"
 	" -m, --maxperiod=TIME	Consider TIME as maximum period (default 2s).\n"
 	"			Slower rates are considered multiple one-time ID's\n"
-	" -x, --remove=TIME	Remove ID's after TIME (default 10s).\n"
+	" -x, --remove=TIME	Remove ID's after TIME (default 10s, 0 for diasabling removal).\n"
 	"\n"
 	;
 #ifdef _GNU_SOURCE
@@ -229,7 +230,7 @@ int main(int argc, char *argv[])
 			curr = cache+j;
 			lastseen = jiffies - curr->lastrx;
 
-			if (lastseen > deadtime) {
+			if ((deadtime > 0) && (lastseen > deadtime)) {
 				/* delete this entry */
 				memcpy(cache+j, cache+j+1, (ncache-j-1)*sizeof(*cache));
 				--ncache;

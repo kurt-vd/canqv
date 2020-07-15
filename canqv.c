@@ -46,9 +46,9 @@ static const char help_msg[] =
 	" -V, --version		Show version\n"
 	" -v, --verbose		Verbose output\n"
 	"\n"
-	" -m, --maxperiod=TIME	Consider TIME as maximum period (default 2s).\n"
+	" -m, --maxperiod=TIME	Consider TIME as maximum period (default 2s, 0 for unlimited).\n"
 	"			Slower rates are considered multiple one-time ID's\n"
-	" -x, --remove=TIME	Remove ID's after TIME (default 10s, 0 for diasabling removal).\n"
+	" -x, --remove=TIME	Remove ID's after TIME (default 10s, 0 for disabling removal).\n"
 	"\n"
 	;
 #ifdef _GNU_SOURCE
@@ -218,7 +218,7 @@ int main(int argc, char *argv[])
 			/* update cache */
 			curr->cf = w.cf;
 			curr->period = jiffies - curr->lastrx;
-			if (curr->period > maxperiod)
+			if ((maxperiod > 0) && (curr->period > maxperiod))
 				curr->period = NAN;
 			curr->lastrx = jiffies;
 		}
